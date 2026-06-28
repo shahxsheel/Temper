@@ -1,4 +1,4 @@
-.PHONY: run-cloud run-mock validate-schemas install-cloud install-local demo test-local
+.PHONY: run-cloud run-cloud-offline run-mock validate-schemas install-cloud install-local demo test-local test-cloud
 
 install-cloud:
 	cd cloud && python -m venv .venv && .venv/bin/pip install -r requirements.txt
@@ -7,7 +7,15 @@ install-local:
 	cd local && python -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 run-cloud:
-	cd cloud && .venv/bin/uvicorn main:app --reload --port 8000
+	cd cloud && .venv/bin/python main.py
+
+run-cloud-offline:
+	cd cloud && CLOUD_OFFLINE=true .venv/bin/python main.py
+
+test-cloud:
+	git checkout fixtures/villain_env/ && rm -f fixtures/villain_env/skills/get_order_usage.md fixtures/villain_env/tools/get_order.json
+	cd local && TEMPER_OFFLINE=false ANTIGRAVITY_BASE_URL=http://localhost:8001 .venv/bin/python eval.py && TEMPER_OFFLINE=false ANTIGRAVITY_BASE_URL=http://localhost:8001 .venv/bin/python patch.py
+	git checkout fixtures/villain_env/ && rm -f fixtures/villain_env/skills/get_order_usage.md fixtures/villain_env/tools/get_order.json
 
 run-mock:
 	cd local && .venv/bin/python mock_server.py

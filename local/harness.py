@@ -38,11 +38,10 @@ def run(bundle: dict, question_prompt: str) -> dict:
         {"answer": str, "latency_ms": int}
         answer includes serialised tool calls if the model made any.
     """
-    if OFFLINE:
+    if OFFLINE or not DEEPSEEK_API_KEY:
+        if not OFFLINE and not DEEPSEEK_API_KEY:
+            print("  [harness] DEEPSEEK_API_KEY not set — using offline answer")
         return {"answer": _OFFLINE_ANSWER, "latency_ms": _OFFLINE_LATENCY_MS}
-
-    if not DEEPSEEK_API_KEY:
-        raise RuntimeError("DEEPSEEK_API_KEY not set and TEMPER_OFFLINE is not true")
 
     system_ctx = _build_system_context(bundle)
 
