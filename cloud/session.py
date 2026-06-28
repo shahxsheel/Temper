@@ -97,7 +97,9 @@ class Session:
 @dataclass
 class Room:
     room_id: str
-    token: str
+    join_token: str
+    dashboard_key: str
+    join_token_used: bool = False
     session_id: str | None = None          # set when Pi calls /register
     # SSE subscribers: list of asyncio.Queue (one per connected browser tab)
     _subscribers: list = field(default_factory=list)
@@ -122,7 +124,8 @@ class Room:
 
 _sessions: dict[str, Session] = {}
 _rooms: dict[str, Room] = {}
-_token_to_room: dict[str, str] = {}       # token → room_id for fast lookup
+_join_token_to_room: dict[str, str] = {}       # one-time join token → room_id
+_dashboard_key_to_room: dict[str, str] = {}    # reusable dashboard key → room_id
 
 
 def create_session(
@@ -154,10 +157,12 @@ def get_session(session_id: str) -> Session | None:
 
 def create_room() -> Room:
     room_id = uuid.uuid4().hex[:12]
-    token = secrets.token_urlsafe(24)
-    room = Room(room_id=room_id, token=token)
+    join_token = secrets.token_urlsafe(24)
+    dashboard_key = secrets.token_urlsafe(24)
+    room = Room(room_id=room_id, join_token=join_token, dashboard_key=dashboard_key)
     _rooms[room_id] = room
-    _token_to_room[token] = room_id
+    _join_token_to_room[join_token] = room_id
+    _dashboard_key_to_room[dashboard_key] = room_id
     return room
 
 
@@ -165,6 +170,11 @@ def get_room(room_id: str) -> Room | None:
     return _rooms.get(room_id)
 
 
-def get_room_by_token(token: str) -> Room | None:
-    rid = _token_to_room.get(token)
+def get_room_by_join_token(token: str) -> Room | None:
+    rid = _join_token_to_room.get(token)
+    return _rooms.get(rid) if rid else None
+
+
+def get_room_by_dashboard_key(key: str) -> Room | None:
+    rid = _dashboard_key_to_room.get(key)
     return _rooms.get(rid) if rid else None

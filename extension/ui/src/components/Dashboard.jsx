@@ -142,7 +142,7 @@ const initialState = {
   report: null,
   patches: [],
   complete: false,
-  baseline_model: 'DeepSeek V3 Flash',
+  baseline_model: 'deepseek-v4-flash',
   judge_model: 'Gemini 2.5 Flash',
 }
 
@@ -181,7 +181,7 @@ export default function Dashboard() {
             report: data.report,
             patches: data.patches || [],
             complete: data.status === 'ready',
-            baseline_model: data.baseline_model || 'DeepSeek V3 Flash',
+            baseline_model: data.baseline_model || 'deepseek-v4-flash',
             judge_model: data.judge_model || 'Gemini 2.5 Flash',
           },
         })

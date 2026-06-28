@@ -5,10 +5,10 @@ Original endpoints (backwards-compatible):
   POST /register, GET /next-question, POST /submit-answer, GET /results, POST /reeval
 
 Pi room endpoints (new):
-  POST /rooms/create            → room_id, token, dashboard_url, connection_block
-  POST /register                → also accepts {room_id, token} for Pi mode
-  GET  /rooms/{room_id}/stream  → SSE stream for dashboard
-  GET  /rooms/{room_id}/state   → current room state for initial render
+  POST /rooms/create            → room_id, join_token, dashboard_key, dashboard_url, connection_block
+  POST /register                → also accepts {room_id, token, bundle} for Pi mode
+  GET  /rooms/{room_id}/stream  → SSE stream for dashboard, authorized by dashboard_key
+  GET  /rooms/{room_id}/state   → current room state for initial render, authorized by dashboard_key
 
 Run:
   python main.py                        # live mode
@@ -31,11 +31,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import config  # noqa: F401
-from config import CLOUD_OFFLINE, HOST_URL, PORT
+from config import CLOUD_OFFLINE, DEEPSEEK_MODEL, GEMINI_MODEL, HOST_URL, PORT
 from session import (
     S_AWAITING, S_GENERATING, S_JUDGING, S_READY, S_REGISTERED,
     Question, Room, Session,
-    create_room, create_session, get_room, get_room_by_token,
+    create_room, create_session, get_room,
     get_session,
 )
 
@@ -43,7 +43,7 @@ app = FastAPI(title="TEMPER Cloud Server", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[HOST_URL, "http://localhost:5173", "http://127.0.0.1:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -53,7 +53,7 @@ app.add_middleware(
 class RegisterBody(BaseModel):
     # Legacy path: bundle-based
     bundle: Any = None
-    # Pi path: room_id + token
+    # Pi path: room_id + one-time join token
     room_id: str | None = None
     token: str | None = None
 
@@ -83,11 +83,26 @@ def _require_session(session_id: str) -> Session:
     return sess
 
 
-def _require_room(room_id: str, token: str) -> Room:
+def _require_dashboard_room(room_id: str, key: str) -> Room:
     room = get_room(room_id)
-    if room is None or room.token != token:
-        raise HTTPException(status_code=403, detail="Invalid room_id or token")
+    if room is None or room.dashboard_key != key:
+        raise HTTPException(status_code=403, detail="Invalid room_id or dashboard key")
     return room
+
+
+def _require_join_room(room_id: str, token: str) -> Room:
+    room = get_room(room_id)
+    if room is None or room.join_token != token:
+        raise HTTPException(status_code=403, detail="Invalid room_id or join token")
+    if room.join_token_used:
+        raise HTTPException(status_code=409, detail="Join token already used")
+    return room
+
+
+def _has_bundle_content(bundle: Any) -> bool:
+    if not isinstance(bundle, dict):
+        return False
+    return bool(bundle.get("system_prompt") or bundle.get("skills") or bundle.get("tools"))
 
 
 ALL_DIMENSIONS = [
@@ -96,16 +111,28 @@ ALL_DIMENSIONS = [
 ]
 
 
-def _connection_block(room_id: str, token: str) -> str:
+def _connection_block(room_id: str, join_token: str) -> str:
     base = HOST_URL
     return f"""You are being evaluated by TEMPER. Follow these steps exactly.
 
-STEP 1 — Register:
+STEP 1 — Build your environment bundle.
+Collect the instructions, skills, and tools you are actually using into this shape:
+{{
+  "system_prompt": "<your active system/developer instructions, or null>",
+  "skills": [{{"name": "<skill-name>", "content": "<skill markdown>"}}],
+  "tools": [{{"name": "<tool-name>", "definition": {{}}}}]
+}}
+
+STEP 2 — Register once:
 POST {base}/register
-Body: {{"room_id": "{room_id}", "token": "{token}"}}
+Body: {{
+  "room_id": "{room_id}",
+  "token": "{join_token}",
+  "bundle": <the environment bundle from step 1>
+}}
 → Save the "session_id" from the response.
 
-STEP 2 — Loop until done:
+STEP 3 — Loop until done:
   a. GET {base}/next-question?session_id=<session_id>
      If response has "status": "done" → stop.
 
@@ -123,7 +150,7 @@ STEP 2 — Loop until done:
 
   d. Repeat from step a.
 
-STEP 3 — You are done. TEMPER will generate your report automatically."""
+STEP 4 — You are done. TEMPER will generate your report automatically."""
 
 
 # ── batch pipeline (original local/eval.py path) ─────────────────────────────
@@ -321,22 +348,6 @@ _UI_DIST = Path(__file__).parent.parent / "extension" / "ui" / "dist"
 
 # ── endpoints ─────────────────────────────────────────────────────────────────
 
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
-
-
-@app.get("/api")
-async def root():
-    mode = "offline" if CLOUD_OFFLINE else "live"
-    return {
-        "service": "TEMPER Cloud Server",
-        "status": "ok",
-        "mode": mode,
-        "docs": "/docs",
-    }
-
-
 # SPA fallback — serves index.html for /room/<id> so dashboard reloads don't 404
 @app.get("/room/{room_id}", include_in_schema=False)
 async def spa_room(room_id: str):
@@ -351,12 +362,15 @@ async def spa_room(room_id: str):
 @app.post("/rooms/create")
 async def rooms_create():
     room = create_room()
-    dash_url = f"{HOST_URL}/room/{room.room_id}?key={room.token}"
-    block = _connection_block(room.room_id, room.token)
+    dash_url = f"{HOST_URL}/room/{room.room_id}?key={room.dashboard_key}"
+    block = _connection_block(room.room_id, room.join_token)
     print(f"[/rooms/create] room_id={room.room_id}")
     return {
         "room_id": room.room_id,
-        "token": room.token,
+        "join_token": room.join_token,
+        "dashboard_key": room.dashboard_key,
+        # Backwards-compatible alias for older copy/paste clients.
+        "token": room.join_token,
         "dashboard_url": dash_url,
         "connection_block": block,
     }
@@ -364,7 +378,7 @@ async def rooms_create():
 
 @app.get("/rooms/{room_id}/state")
 async def room_state(room_id: str, key: str = Query(...)):
-    room = _require_room(room_id, key)
+    room = _require_dashboard_room(room_id, key)
     sess = get_session(room.session_id) if room.session_id else None
 
     questions_data = []
@@ -390,14 +404,14 @@ async def room_state(room_id: str, key: str = Query(...)):
         "questions": questions_data,
         "report": sess.report if sess else None,
         "patches": sess.patches if sess else [],
-        "baseline_model": "DeepSeek V3 Flash",
-        "judge_model": "Gemini 2.5 Flash",
+        "baseline_model": DEEPSEEK_MODEL,
+        "judge_model": GEMINI_MODEL,
     }
 
 
 @app.get("/rooms/{room_id}/stream")
 async def room_stream(room_id: str, key: str = Query(...)):
-    room = _require_room(room_id, key)
+    room = _require_dashboard_room(room_id, key)
 
     async def event_generator():
         queue = room.add_subscriber()
@@ -432,11 +446,14 @@ async def room_stream(room_id: str, key: str = Query(...)):
 async def register(body: RegisterBody):
     # Pi path: room_id + token
     if body.room_id and body.token:
-        room = _require_room(body.room_id, body.token)
+        room = _require_join_room(body.room_id, body.token)
         if room.session_id:
             raise HTTPException(status_code=409, detail="Room already registered")
+        if not _has_bundle_content(body.bundle):
+            raise HTTPException(status_code=400, detail="Pi registration requires an environment bundle")
 
-        sess = create_session(bundle={}, pi_mode=True)
+        room.join_token_used = True
+        sess = create_session(bundle=body.bundle, pi_mode=True)
         room.session_id = sess.session_id
         sess.status = S_GENERATING
 

@@ -17,7 +17,7 @@ const s = {
   },
   tableHeader: {
     display: 'grid',
-    gridTemplateColumns: '2rem 160px 1fr 72px 72px 52px 80px 80px',
+    gridTemplateColumns: '2rem 160px 1fr 72px 72px 52px 104px 120px',
     gap: '0.5rem',
     padding: '0.6rem 1rem',
     background: 'var(--surface)',
@@ -36,7 +36,7 @@ const s = {
   }),
   rowMain: {
     display: 'grid',
-    gridTemplateColumns: '2rem 160px 1fr 72px 72px 52px 80px 80px',
+    gridTemplateColumns: '2rem 160px 1fr 72px 72px 52px 104px 120px',
     gap: '0.5rem',
     padding: '0.65rem 1rem',
     alignItems: 'center',
@@ -145,6 +145,18 @@ function fmtTokens(inp, out) {
   return `${inp ?? '?'}/${out ?? '?'}`
 }
 
+function fmtPair(primary, secondary, formatter) {
+  if (primary == null && secondary == null) return '—'
+  return `${formatter(primary)} / ${formatter(secondary)}`
+}
+
+function fmtTokenPair(q) {
+  const pi = fmtTokens(q.pi_input_tokens, q.pi_output_tokens)
+  const baseline = fmtTokens(q.baseline_input_tokens, q.baseline_output_tokens)
+  if (pi === '—' && baseline === '—') return '—'
+  return `${pi} / ${baseline}`
+}
+
 export default function QuestionTable({ questions }) {
   const [expandedId, setExpandedId] = useState(null)
 
@@ -165,8 +177,8 @@ export default function QuestionTable({ questions }) {
         <div style={{ textAlign: 'right' }}>Pi</div>
         <div style={{ textAlign: 'right' }}>Baseline</div>
         <div style={{ textAlign: 'right' }}>Δ</div>
-        <div style={{ textAlign: 'right' }}>Latency</div>
-        <div style={{ textAlign: 'right' }}>Tokens</div>
+        <div style={{ textAlign: 'right' }}>Latency P/B</div>
+        <div style={{ textAlign: 'right' }}>Tokens P/B</div>
       </div>
 
       {questions.map((q, i) => {
@@ -183,8 +195,8 @@ export default function QuestionTable({ questions }) {
               <span style={s.score(q.harness_score, q.baseline_score)}>{fmtScore(q.harness_score)}</span>
               <span style={s.score(q.baseline_score, q.baseline_score)}>{fmtScore(q.baseline_score)}</span>
               <span style={s.delta(q.delta)}>{fmtDelta(q.delta)}</span>
-              <span style={s.latency}>{fmt(q.pi_latency_ms)}</span>
-              <span style={s.tokens}>{fmtTokens(q.pi_input_tokens, q.pi_output_tokens)}</span>
+              <span style={s.latency}>{fmtPair(q.pi_latency_ms, q.baseline_latency_ms, fmt)}</span>
+              <span style={s.tokens}>{fmtTokenPair(q)}</span>
             </div>
             {expanded && q.prompt && (
               <div style={s.expanded}>
