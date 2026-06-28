@@ -43,6 +43,31 @@ _OFFLINE_REEVAL_SCORES = {
 
 _OFFLINE_LATENCY = {"baseline_ms": 410, "harness_ms": 750}
 
+_JUDGE_SINGLE_PROMPT = """You are TEMPER's evaluation judge. Score two AI answers for the given dimension.
+
+## Dimension: {dimension}
+{dimension_description}
+
+## Question
+{question}
+
+## Baseline Answer (bare model, no harness)
+{baseline_answer}
+
+## Pi Answer (model under test)
+{harness_answer}
+
+Score each answer 0–100 for the {dimension} dimension.
+If Pi score < baseline by more than 5 points, write a one-sentence verdict explaining why.
+Otherwise write a one-sentence verdict noting they performed similarly or Pi did better.
+
+Return ONLY valid JSON:
+{{
+  "baseline_score": <0-100>,
+  "harness_score": <0-100>,
+  "verdict": "<one sentence>"
+}}"""
+
 _JUDGE_PROMPT = """You are TEMPER's evaluation judge. Score how well an AI model answer satisfies the
 evaluation dimension, given the question and the environment context.
 
@@ -233,12 +258,106 @@ def _fix_type(dimension: str) -> str | None:
     }.get(dimension)
 
 
+def judge_single_question(question: Question, bundle: dict) -> dict:
+    """Judge one question immediately. Caches result on question.judge_result.
+
+    Returns {baseline_score, harness_score, verdict}.
+    Used in Pi mode for live per-question SSE updates.
+    """
+    if CLOUD_OFFLINE:
+        dim = question.dimension
+        s = _OFFLINE_SCORES.get(dim, {"baseline": 70, "harness": 70})
+        result = {
+            "baseline_score": s["baseline"],
+            "harness_score": s["harness"],
+            "verdict": s.get("root_cause") or "Both answered similarly.",
+        }
+        question.judge_result = result
+        return result
+
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY not set")
+
+    if question.dimension == "latency_delta":
+        b_ms = question.baseline_latency_ms or 400
+        h_ms = question.harness_latency_ms or 800
+        b_score = min(100, max(0, 100 - int(b_ms / 20)))
+        h_score = min(100, max(0, 100 - int(h_ms / 20)))
+        verdict = f"Pi latency {h_ms:.0f}ms vs baseline {b_ms:.0f}ms."
+        result = {"baseline_score": b_score, "harness_score": h_score, "verdict": verdict}
+        question.judge_result = result
+        return result
+
+    from google import genai
+    from google.genai import types
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    dim_desc = _DIM_DESCRIPTIONS.get(question.dimension, "")
+    prompt = _JUDGE_SINGLE_PROMPT.format(
+        dimension=question.dimension,
+        dimension_description=dim_desc,
+        question=question.prompt,
+        baseline_answer=question.baseline_answer or "",
+        harness_answer=question.harness_answer or "",
+    )
+
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.1,
+            ),
+        )
+        data = json.loads(response.text)
+        result = {
+            "baseline_score": float(data["baseline_score"]),
+            "harness_score": float(data["harness_score"]),
+            "verdict": str(data.get("verdict", "")),
+        }
+    except Exception as exc:
+        print(f"[judge] single question failed for {question.question_id}: {exc}")
+        result = {"baseline_score": 70, "harness_score": 70, "verdict": "Judgment unavailable."}
+
+    question.judge_result = result
+    return result
+
+
 def judge_all(questions: list[Question], bundle: dict,
               dimensions: list[str] | None = None,
               is_reeval: bool = False) -> dict:
-    """Judge all dimensions. Returns the full dimensions dict for the report."""
+    """Judge all dimensions. Returns the full dimensions dict for the report.
+
+    In Pi mode, questions may already have judge_result cached from per-question
+    judging — this aggregates cached results instead of calling Gemini again.
+    """
     all_dims = dimensions or [
         "instruction_adherence", "tool_accuracy", "output_format",
         "skill_trigger", "latency_delta", "error_recovery",
     ]
-    return {dim: judge_dimension(dim, questions, bundle, is_reeval) for dim in all_dims}
+    return {dim: _judge_dimension_with_cache(dim, questions, bundle, is_reeval)
+            for dim in all_dims}
+
+
+def _judge_dimension_with_cache(dimension: str, questions: list[Question],
+                                 bundle: dict, is_reeval: bool = False) -> dict:
+    """Aggregate cached per-question results when available, otherwise call Gemini."""
+    dim_qs = [q for q in questions if q.dimension == dimension and q.judge_result is not None]
+
+    if dim_qs:
+        import statistics
+        baseline_scores = [q.judge_result["baseline_score"] for q in dim_qs]
+        harness_scores = [q.judge_result["harness_score"] for q in dim_qs]
+        baseline_avg = round(statistics.mean(baseline_scores))
+        harness_avg = round(statistics.mean(harness_scores))
+        delta = harness_avg - baseline_avg
+        root_cause = next(
+            (q.judge_result.get("verdict") for q in dim_qs
+             if q.judge_result.get("harness_score", 100) < q.judge_result.get("baseline_score", 0) - 5),
+            None,
+        )
+        return _build_result(dimension, baseline_avg, harness_avg, delta, root_cause,
+                             len(dim_qs), is_reeval=is_reeval)
+
+    return judge_dimension(dimension, questions, bundle, is_reeval)
