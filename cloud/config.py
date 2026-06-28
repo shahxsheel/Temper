@@ -18,4 +18,7 @@ DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 # Set CLOUD_OFFLINE=true to run the full pipeline with scripted responses (no API keys needed)
 CLOUD_OFFLINE = os.getenv("CLOUD_OFFLINE", "").lower() == "true"
 
-PORT = int(os.getenv("CLOUD_PORT", "8001"))
+PORT = int(os.getenv("CLOUD_PORT") or os.getenv("PORT", "8001"))
+
+# Public URL for connection block generation (no trailing slash)
+HOST_URL = os.getenv("TEMPER_HOST_URL", f"http://localhost:{PORT}").rstrip("/")

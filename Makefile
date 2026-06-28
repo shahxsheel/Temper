@@ -1,10 +1,16 @@
-.PHONY: run-cloud run-cloud-offline run-mock validate-schemas install-cloud install-local demo test-local test-cloud test-integration
+.PHONY: run-cloud run-cloud-offline run-mock validate-schemas install-cloud install-local demo test-local test-cloud test-integration install-ui build-ui
 
 install-cloud:
 	cd cloud && python -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 install-local:
 	cd local && python -m venv .venv && .venv/bin/pip install -r requirements.txt
+
+install-ui:
+	cd extension/ui && npm install
+
+build-ui:
+	cd extension/ui && npm run build
 
 run-cloud:
 	cd cloud && .venv/bin/python main.py

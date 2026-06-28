@@ -146,8 +146,13 @@ def run_offline_pipeline() -> tuple[dict, dict]:
     try:
         time.sleep(2)  # wait for startup
 
-        client_env = {**os.environ, "TEMPER_OFFLINE": "false",
-                      "ANTIGRAVITY_BASE_URL": BASE_URL}
+        client_env = {
+            **os.environ,
+            "TEMPER_OFFLINE": "false",
+            "ANTIGRAVITY_BASE_URL": BASE_URL,
+            "DEEPSEEK_API_KEY": "",
+            "GEMINI_API_KEY": "",
+        }
 
         # run @eval
         subprocess.run(
@@ -172,8 +177,7 @@ def run_offline_pipeline() -> tuple[dict, dict]:
         subprocess.run(["git", "checkout", "fixtures/villain_env/"], cwd=ROOT,
                        capture_output=True)
         for f in ["fixtures/villain_env/skills/get_order_usage.md",
-                  "fixtures/villain_env/tools/get_order.json",
-                  "fixtures/villain_env/skills/lookup_order.md"]:
+                  "fixtures/villain_env/tools/get_order.json"]:
             (ROOT / f).unlink(missing_ok=True)
 
 

@@ -17,7 +17,7 @@ except ImportError:
 
 OFFLINE = os.getenv("TEMPER_OFFLINE", "").lower() == "true"
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
 
 _OFFLINE_ANSWER = (
     "Thank you for reaching out to Acme SaaS support. "
