@@ -14,6 +14,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: 'dist',
+    outDir: '../../cloud/ui_dist',
+    emptyOutDir: true,
   },
 })

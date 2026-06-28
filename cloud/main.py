@@ -377,7 +377,7 @@ async def _pi_finalize(sess: Session, room: Room) -> None:
 
 # ── static UI ─────────────────────────────────────────────────────────────────
 
-_UI_DIST = Path(__file__).parent.parent / "extension" / "ui" / "dist"
+_UI_DIST = Path(__file__).parent / "ui_dist"
 
 
 # ── endpoints ─────────────────────────────────────────────────────────────────
