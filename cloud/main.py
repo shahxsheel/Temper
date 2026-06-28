@@ -26,7 +26,7 @@ from typing import Any
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -240,6 +240,8 @@ async def _process_single_question(sess: Session, room: Room, question: Question
         )
         question.baseline_answer = b["answer"]
         question.baseline_latency_ms = b.get("latency_ms")
+        question.baseline_input_tokens = b.get("input_tokens")
+        question.baseline_output_tokens = b.get("output_tokens")
     except Exception as exc:
         print(f"[pi-pipeline] baseline failed for {question.question_id}: {exc}")
         question.baseline_answer = ""
@@ -251,6 +253,9 @@ async def _process_single_question(sess: Session, room: Room, question: Question
     except Exception as exc:
         print(f"[pi-pipeline] judge failed for {question.question_id}: {exc}")
         result = {"baseline_score": 70, "harness_score": 70, "verdict": "Judgment unavailable."}
+
+    # Cache result so all_judged() recognises this question as done (covers fallback too)
+    question.judge_result = result
 
     # 4. Push question_judged SSE event
     await room.push({
@@ -265,6 +270,8 @@ async def _process_single_question(sess: Session, room: Room, question: Question
         "baseline_latency_ms": question.baseline_latency_ms,
         "pi_input_tokens": question.pi_input_tokens,
         "pi_output_tokens": question.pi_output_tokens,
+        "baseline_input_tokens": question.baseline_input_tokens,
+        "baseline_output_tokens": question.baseline_output_tokens,
     })
 
     sess.questions_judged += 1
@@ -330,6 +337,15 @@ async def root():
     }
 
 
+# SPA fallback — serves index.html for /room/<id> so dashboard reloads don't 404
+@app.get("/room/{room_id}", include_in_schema=False)
+async def spa_room(room_id: str):
+    index = _UI_DIST / "index.html"
+    if index.exists():
+        return FileResponse(str(index))
+    raise HTTPException(status_code=404, detail="UI not built — run: make build-ui")
+
+
 # ── Pi room endpoints ─────────────────────────────────────────────────────────
 
 @app.post("/rooms/create")
@@ -362,6 +378,8 @@ async def room_state(room_id: str, key: str = Query(...)):
                 "pi_input_tokens": q.pi_input_tokens,
                 "pi_output_tokens": q.pi_output_tokens,
                 "baseline_latency_ms": q.baseline_latency_ms,
+                "baseline_input_tokens": q.baseline_input_tokens,
+                "baseline_output_tokens": q.baseline_output_tokens,
                 "judge_result": q.judge_result,
             })
 

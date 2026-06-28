@@ -33,6 +33,8 @@ class Question:
     harness_latency_ms: float | None = None
     pi_input_tokens: int | None = None
     pi_output_tokens: int | None = None
+    baseline_input_tokens: int | None = None
+    baseline_output_tokens: int | None = None
     # Cached per-question judge result (set after judge_single_question)
     judge_result: dict | None = None  # {baseline_score, harness_score, verdict}
 

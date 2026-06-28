@@ -111,13 +111,15 @@ function reducer(state, action) {
               delta: action.delta,
               verdict: action.verdict,
               baseline_latency_ms: action.baseline_latency_ms,
+              baseline_input_tokens: action.baseline_input_tokens,
+              baseline_output_tokens: action.baseline_output_tokens,
               status: 'judged',
             }
           : q
       )
       const baselineTokens = {
-        input: (state.baselineTokens.input || 0) + 500,  // estimated
-        output: (state.baselineTokens.output || 0) + 120,
+        input:  (state.baselineTokens.input  || 0) + (action.baseline_input_tokens  || 0),
+        output: (state.baselineTokens.output || 0) + (action.baseline_output_tokens || 0),
       }
       return { ...state, questions, baselineTokens }
     }
@@ -165,8 +167,10 @@ export default function Dashboard() {
           (acc, q) => ({ input: acc.input + (q.pi_input_tokens || 0), output: acc.output + (q.pi_output_tokens || 0) }),
           { input: 0, output: 0 }
         )
-        const judgedCount = questions.filter(q => q.status === 'judged').length
-        const baselineTokens = { input: judgedCount * 500, output: judgedCount * 120 }
+        const baselineTokens = questions.reduce(
+          (acc, q) => ({ input: acc.input + (q.baseline_input_tokens || 0), output: acc.output + (q.baseline_output_tokens || 0) }),
+          { input: 0, output: 0 }
+        )
         dispatch({
           type: 'INIT',
           payload: {

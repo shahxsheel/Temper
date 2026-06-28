@@ -51,9 +51,9 @@ def run_baseline(questions: list[dict]) -> dict[str, dict]:
 
 
 def run_single(question: dict) -> dict:
-    """Run one question through bare DeepSeek. Returns {answer, latency_ms}."""
+    """Run one question through bare DeepSeek. Returns {answer, latency_ms, input_tokens, output_tokens}."""
     if CLOUD_OFFLINE:
-        return {"answer": _OFFLINE_ANSWER, "latency_ms": 410}
+        return {"answer": _OFFLINE_ANSWER, "latency_ms": 410, "input_tokens": 0, "output_tokens": 0}
 
     if not DEEPSEEK_API_KEY:
         raise RuntimeError("DEEPSEEK_API_KEY not set and CLOUD_OFFLINE is not true")
@@ -62,6 +62,7 @@ def run_single(question: dict) -> dict:
     client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
 
     t0 = time.monotonic()
+    response = None
     try:
         response = client.chat.completions.create(
             model=DEEPSEEK_MODEL,
@@ -73,4 +74,9 @@ def run_single(question: dict) -> dict:
         print(f"[baseline] DeepSeek failed for {question['question_id']}: {exc}")
         answer = _OFFLINE_ANSWER
     latency_ms = int((time.monotonic() - t0) * 1000)
-    return {"answer": answer, "latency_ms": latency_ms}
+    return {
+        "answer": answer,
+        "latency_ms": latency_ms,
+        "input_tokens": response.usage.prompt_tokens if response else 0,
+        "output_tokens": response.usage.completion_tokens if response else 0,
+    }
