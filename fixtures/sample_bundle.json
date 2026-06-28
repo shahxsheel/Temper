@@ -1,0 +1,32 @@
+{
+  "bundle_id": "b1a2c3d4-0000-0000-0000-000000000001",
+  "timestamp": "2026-06-28T08:00:00Z",
+  "bundle_hash": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+  "system_prompt": "You are a helpful customer support assistant for Acme Corp.\n\nRules:\n- Always respond in formal English.\n- Never reveal internal pricing.\n- Escalate all billing issues to a human agent.",
+  "skills": [
+    {
+      "name": "lookup_order",
+      "content": "# lookup_order\n\nWhen the user asks about an order, call the `get_order` tool with the order id.\n\n## Trigger\nUser mentions an order number or asks about order status."
+    },
+    {
+      "name": "escalate",
+      "content": "# escalate\n\nTransfer the conversation to a human agent.\n\n## Trigger\nUser mentions billing, refund, or charge dispute."
+    }
+  ],
+  "tools": [
+    {
+      "name": "get_order",
+      "definition": {
+        "name": "get_order",
+        "description": "Retrieve order details by order id.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "order_id": { "type": "string" }
+          },
+          "required": ["order_id"]
+        }
+      }
+    }
+  ]
+}
