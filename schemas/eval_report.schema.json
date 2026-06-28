@@ -1,0 +1,88 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "eval_report",
+  "title": "TEMPER Eval Report",
+  "description": "Full evaluation report produced by the cloud layer after judging. Stored locally and rendered by the report renderer.",
+  "type": "object",
+  "required": ["session_id", "timestamp", "bundle_hash", "dimensions", "summary"],
+  "additionalProperties": false,
+  "definitions": {
+    "dimension_result": {
+      "type": "object",
+      "required": ["baseline_score", "harness_score", "delta", "status", "fixable", "test_cases_run"],
+      "additionalProperties": false,
+      "properties": {
+        "baseline_score":  { "type": "number", "minimum": 0, "maximum": 100 },
+        "harness_score":   { "type": "number", "minimum": 0, "maximum": 100 },
+        "delta":           { "type": "number", "minimum": -100, "maximum": 100 },
+        "status": {
+          "type": "string",
+          "enum": ["PASSING", "NEEDS_PATCH", "RESOLVED", "STRUCTURAL_LIMITATION"]
+        },
+        "root_cause":       { "type": ["string", "null"] },
+        "fixable":          { "type": "boolean" },
+        "structural_reason":{ "type": ["string", "null"] },
+        "fix_type": {
+          "type": ["string", "null"],
+          "enum": ["system_prompt", "tool_definition", "skill", null]
+        },
+        "test_cases_run":   { "type": "integer", "minimum": 0 },
+        "latency_baseline_ms": { "type": ["number", "null"] },
+        "latency_harness_ms":  { "type": ["number", "null"] }
+      }
+    }
+  },
+  "properties": {
+    "session_id":   { "type": "string" },
+    "timestamp":    { "type": "string", "format": "date-time" },
+    "bundle_hash":  { "type": "string" },
+    "dimensions": {
+      "type": "object",
+      "required": [
+        "instruction_adherence",
+        "tool_accuracy",
+        "output_format",
+        "skill_trigger",
+        "latency_delta",
+        "error_recovery"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "instruction_adherence": { "$ref": "#/definitions/dimension_result" },
+        "tool_accuracy":         { "$ref": "#/definitions/dimension_result" },
+        "output_format":         { "$ref": "#/definitions/dimension_result" },
+        "skill_trigger":         { "$ref": "#/definitions/dimension_result" },
+        "latency_delta":         { "$ref": "#/definitions/dimension_result" },
+        "error_recovery":        { "$ref": "#/definitions/dimension_result" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["dimensions_passing", "dimensions_failing", "dimensions_structural"],
+      "additionalProperties": false,
+      "properties": {
+        "dimensions_passing":    { "type": "array", "items": { "type": "string" } },
+        "dimensions_failing":    { "type": "array", "items": { "type": "string" } },
+        "dimensions_structural": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "patch_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["dimension", "artifact_path", "pre_score", "post_score", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "dimension":     { "type": "string" },
+          "artifact_path": { "type": "string" },
+          "pre_score":     { "type": "number" },
+          "post_score":    { "type": "number" },
+          "status": {
+            "type": "string",
+            "enum": ["RESOLVED", "STRUCTURAL_LIMITATION"]
+          }
+        }
+      }
+    }
+  }
+}

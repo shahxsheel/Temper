@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "environment_bundle",
+  "title": "TEMPER Environment Bundle",
+  "description": "The environment being evaluated: system prompt, skills, and tool definitions collected from the user's project.",
+  "type": "object",
+  "required": ["bundle_id", "timestamp", "skills", "tools"],
+  "additionalProperties": false,
+  "properties": {
+    "bundle_id": {
+      "type": "string",
+      "description": "UUID identifying this bundle."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of when the bundle was collected."
+    },
+    "bundle_hash": {
+      "type": "string",
+      "description": "SHA-256 of canonical bundle content (system_prompt + all skill contents + all tool definitions). Stable across identical content."
+    },
+    "system_prompt": {
+      "type": ["string", "null"],
+      "description": "Full text of the system prompt, or null if none."
+    },
+    "skills": {
+      "type": "array",
+      "description": "Skill files found in skills/*.md.",
+      "items": {
+        "type": "object",
+        "required": ["name", "content"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "description": "Filename without extension." },
+          "content": { "type": "string", "description": "Full file content." }
+        }
+      }
+    },
+    "tools": {
+      "type": "array",
+      "description": "Tool definitions found in tools/*.json.",
+      "items": {
+        "type": "object",
+        "required": ["name", "definition"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "description": "Tool name." },
+          "definition": { "type": "object", "description": "Raw tool schema object." }
+        }
+      }
+    }
+  }
+}
